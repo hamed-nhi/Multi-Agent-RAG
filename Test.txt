@@ -26,3 +26,16 @@ Find papers on the topic of NLP that were published as conference papers.
 Find tickets about MySQL issues.
 What support tickets were raised by Aniruddha Salve?
 Search for open tickets related to Neo4j.
+
+
+
+ا سوالاتی را بپرسید که انتظار دارید توسط Agent متخصص Neo4j پاسخ داده شوند. به عنوان مثال:
+
+Who collaborates with Aniruddha Salve?
+What projects or topics is Saba Attar working on?
+Find researchers working on AI in Healthcare.
+List collaborators of Arnab Mitra Utsab. (این مستقیماً از مثال مقاله است)
+What is the research field of Patrick Lewis?
+  Example for neo4j (research field):
+        User Question: What is the research field of Patrick Lewis?
+        JSON Response: {{"data_source": "neo4j"}}

@@ -6,7 +6,7 @@ from langchain_together import ChatTogether
 from graph.state import GraphState
 from config import LLM_MODEL, TOGETHER_API_KEY
 # Import all necessary tools, including the new MeiliSearch tool
-from tools.db_tools import run_sqlite_query, run_mongodb_query, run_meilisearch_query
+from tools.db_tools import run_sqlite_query, run_mongodb_query, run_meilisearch_query, run_neo4j_query
 
 # --- Initialize the LLM ---
 llm = ChatTogether(
@@ -15,68 +15,67 @@ llm = ChatTogether(
 )
 
 # --- Query Execution Node ---
+# agents/executor_and_responder.py
+
+# ... (import statements and llm instance at the top) ...
+
+# --- Query Execution Node ---
 def execute_query(state: GraphState) -> GraphState:
     """
-    Executes the generated query on the appropriate database (SQLite, MongoDB, or MeiliSearch)
-    and retrieves the context.
+    Executes the generated query on the appropriate database 
+    (SQLite, MongoDB, MeiliSearch, or Neo4j) and retrieves the context.
     """
     print("---EXECUTING QUERY---")
     generated_q = state.get("generated_query")
     data_source = state.get("data_source")
     
-    context = "" # Initialize context
-    error_message = state.get("error") # Preserve error from router if any
+    context = "" 
+    error_message = state.get("error") 
 
     if not generated_q and data_source not in ["end", "general"]:
-        # If no query was generated but we expected one from a specific data source agent
         current_error = f"No query was generated for data source: {data_source}."
         print(current_error)
-        state["error"] = error_message or current_error # Prioritize router error
+        state["error"] = error_message or current_error 
     elif data_source == 'sqlite':
         context = run_sqlite_query.invoke(generated_q)
     elif data_source == 'mongodb':
         context = run_mongodb_query.invoke(generated_q)
-    elif data_source == 'meilisearch': # Condition for MeiliSearch
-        # The run_meilisearch_query tool expects the search string directly
+    elif data_source == 'meilisearch': 
         context = run_meilisearch_query.invoke(generated_q)
+    elif data_source == 'neo4j': # New condition for Neo4j
+        # The run_neo4j_query tool expects the Cypher string directly
+        context = run_neo4j_query.invoke(generated_q)
     elif data_source in ["end", "general"]:
-        # If router decided to end, or an error occurred before query generation,
-        # or it's a general query for which we don't have an executor
         print(f"Execution skipped as data_source is '{data_source}'. Router error (if any): {error_message}")
-        # Context remains empty, error (if any) is preserved from router or previous steps
     else:
         current_error = f"Unknown data_source type for query execution: {data_source}"
         print(current_error)
         state["error"] = error_message or current_error
 
-    # --- ADD THIS PRINT STATEMENT FOR DEBUGGING ---
     print(f"Raw context from tool (before type check): '{context}', type: {type(context)}")
 
-    # Check if the context indicates an error from the tool itself or "not found"
-    if isinstance(context, str) and ("An error occurred" in context or "Failed to parse" in context or "No documents found" in context):
-        tool_message = context # The message from the tool
+    if isinstance(context, str) and ("An error occurred" in context or "Failed to parse" in context or "No records found" in context or "No documents found" in context or "Connection Error" in context): # Added "No records found" and "Connection Error" for Neo4j
+        tool_message = context 
         print(f"Tool execution resulted in message: {tool_message}")
         
-        if "No documents found" in tool_message:
-            state["context"] = "[]" # Standardize empty results for the responder
-            # Optionally, set a soft error or info message if 'no documents' isn't a hard error
-            # For now, we let the responder handle "[]" as "couldn't find info"
-        else: # It's a more serious error from the tool
+        if "No records found" in tool_message or "No documents found" in tool_message :
+            state["context"] = "[]" 
+        else: 
             state["context"] = f"Error during query execution: {tool_message}"
-            state["error"] = error_message or tool_message # Prioritize existing error, then tool's error
-    elif context is not None : # If context is not one of the string error messages, and not None
+            state["error"] = error_message or tool_message 
+    elif context is not None : 
         state["context"] = context
-    else: # If context is None (e.g. if a tool invoke returned None unexpectedly)
-        state["context"] = "[]" # Treat as empty result
-        if data_source not in ["end", "general"] and not state.get("error"): # Only set error if not already an end state
+    else: 
+        state["context"] = "[]" 
+        if data_source not in ["end", "general"] and not state.get("error"): 
              state["error"] = state.get("error") or f"Query execution for {data_source} returned no context."
-
 
     print(f"Final context being set to state: {state.get('context')}")
     if state.get("error"):
         print(f"Error state after execution: {state['error']}")
     
     return state
+
 
 # --- Response Generation Node ---
 def generate_response(state: GraphState) -> GraphState:

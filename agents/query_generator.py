@@ -173,13 +173,76 @@ def generate_meilisearch_query(state: GraphState) -> GraphState:
     
     state["generated_query"] = generated_query_string.strip()
     return state
+
+# --- Neo4j Agent ---
+
+def generate_neo4j_query(state: GraphState) -> GraphState:
+    """
+    Generates a Cypher query for Neo4j based on the user's question.
+    """
+    print("---GENERATING NEO4J CYPHER QUERY---")
+    query = state["query"]
+    
+    # Prompt engineering for Neo4j.
+    # We will use the schema description and examples from the paper (page 5-6).
+    # Nodes: Researcher {name: string, field: string}, ProjectOrTopic {name: string, domain: string}
+    # Relationships: COLLABORATES_WITH, WORKS_ON
+    prompt = ChatPromptTemplate.from_template(
+        """
+        You are an expert at formulating Cypher queries for a Neo4j database.
+        The graph database contains information about a ResearchNetwork.
+
+        Available Node Labels and their properties:
+        - `Researcher`:
+            - `name` (string): The name of the researcher.
+            - `field` (string): The primary research field of the researcher.
+        - `ProjectOrTopic`:
+            - `name` (string): The name of the project or topic.
+            - `domain` (string): The broader domain of the project or topic.
+        
+        Available Relationship Types:
+        - `COLLABORATES_WITH` (between two Researcher nodes)
+        - `WORKS_ON` (from a Researcher node to a ProjectOrTopic node)
+
+        Based on the user's question, generate an appropriate Cypher query.
+
+        User Question: "{question}"
+
+        Few-shot Examples (inspired by the paper):
+        - User Question: List all collaborators of Arnab Mitra Utsab.
+        - Cypher Query: MATCH (r:Researcher {{name: 'Arnab Mitra Utsab'}})-[:COLLABORATES_WITH]->(collaborator:Researcher) RETURN collaborator.name;
+
+        - User Question: Find researchers working on AI projects in the domain of healthcare.
+        - Cypher Query: MATCH (r:Researcher)-[:WORKS_ON]->(pt:ProjectOrTopic) WHERE pt.domain = 'AI in Healthcare' RETURN r.name;
+        
+        - User Question: What projects or topics is Aniruddha Salve working on?
+        - Cypher Query: MATCH (r:Researcher {{name: 'Aniruddha Salve'}})-[:WORKS_ON]->(pt:ProjectOrTopic) RETURN pt.name, pt.domain;
+
+        Your Task:
+        Provide only the Cypher query string and nothing else. Ensure the query ends with a semicolon.
+
+        Cypher Query:
+        """
+    )
+    
+    # We are expecting a string output for the Cypher query.
+    from langchain_core.output_parsers import StrOutputParser as StringOutputParser # Using the alias
+    query_gen_chain = prompt | llm | StringOutputParser()
+    
+    generated_cypher_query = query_gen_chain.invoke({"question": query})
+
+    print(f"Generated Neo4j Cypher Query: {generated_cypher_query}")
+    
+    # Update the state
+    state["generated_query"] = generated_cypher_query.strip() 
+    return state
     
 # --- Query Generation Node ---
 
 def generate_query(state: GraphState) -> GraphState:
     """
     A central node that decides which query generator (specialized agent) to call:
-    SQLite, MongoDB, or MeiliSearch.
+    SQLite, MongoDB, MeiliSearch, or Neo4j.
     """
     data_source = state.get("data_source") 
     
@@ -191,7 +254,10 @@ def generate_query(state: GraphState) -> GraphState:
         return generate_mongodb_query(state)
     elif data_source == "meilisearch":
         return generate_meilisearch_query(state)
+    elif data_source == "neo4j":
+        return generate_neo4j_query(state)
     else:
         print(f"No specific query generator for data_source: {data_source}")
         state["generated_query"] = "" 
         return state
+    

@@ -18,3 +18,5 @@ meilisearch
 
 # Neo4j driver
 neo4j
+
+streamlit

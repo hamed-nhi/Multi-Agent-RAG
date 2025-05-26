@@ -4,7 +4,7 @@ import sqlite3
 from pymongo import MongoClient
 import meilisearch
 from langchain_core.tools import tool
-
+from neo4j import GraphDatabase
 # --- SQLite Tools ---
 
 def get_sqlite_connection():
@@ -125,3 +125,59 @@ def run_meilisearch_query(search_query: str, index_name: str = "support_tickets"
     except Exception as e:
         return f"An error occurred during MeiliSearch query execution: {e}"
 
+def get_neo4j_driver():
+    """
+    Returns a Neo4j driver instance.
+    Remember to close the driver when done: driver.close()
+    """
+    # Define your Neo4j connection details
+    NEO4J_URI = "bolt://localhost:7687"
+    NEO4J_USER = "neo4j"
+    NEO4J_PASSWORD = "12345678Az"
+    
+    driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
+    try:
+        driver.verify_connectivity()
+        # print("Successfully connected to Neo4j for tool setup.") # Optional: for verbose logging
+    except Exception as e:
+        print(f"Error connecting to Neo4j for tool: {e}")
+        # If connection fails, we might want to raise an error or return None
+        # For now, the tool will fail later if the driver is None or connection fails
+        raise ConnectionError(f"Could not connect to Neo4j: {e}")
+    return driver
+
+@tool
+def run_neo4j_query(cypher_query: str, database: str = "myraggraphdb") -> str:
+    """
+    Executes a Cypher query on the specified Neo4j database (default: 'myraggraphdb').
+    'cypher_query' is the Cypher query string to execute.
+    Use this to find information about researchers, their collaborations, and projects/topics they work on.
+    Example: "MATCH (r:Researcher {name: 'Arnab Mitra Utsab'})-[:COLLABORATES_WITH]->(collaborator:Researcher) RETURN collaborator.name"
+    """
+    driver = None
+    try:
+        driver = get_neo4j_driver()
+        records_list = []
+        # For Neo4j, operations that write data need an explicit transaction.
+        # For read-only queries, session.run() can be used directly or within a transaction.
+        # Using a session ensures resources are managed correctly.
+        with driver.session(database=database) as session:
+            print(f"Executing Neo4j Cypher query: {cypher_query}") # For debugging
+            results = session.run(cypher_query)
+            # Convert results to a list of dictionaries for easier processing/display
+            for record in results:
+                records_list.append(record.data()) # record.data() converts each record to a dict
+
+        if not records_list:
+            return "No records found matching the Cypher query in Neo4j."
+            
+        return str(records_list) # Return the results as a string representation of a list of dicts
+    except ConnectionError as ce: # Catching the specific connection error from get_neo4j_driver
+        return f"Neo4j Connection Error: {ce}"
+    except Exception as e:
+        # Catching other potential errors from Neo4j, e.g., CypherSyntaxError
+        return f"An error occurred during Neo4j Cypher query execution: {e}"
+    finally:
+        if driver:
+            driver.close()
+            # print("Neo4j driver connection closed for tool.") # Optional: for verbose logging
