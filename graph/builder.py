@@ -6,45 +6,49 @@ from .state import GraphState
 from agents.router import route_query
 from agents.query_generator import generate_query
 from agents.executor_and_responder import execute_query, generate_response
+from tools.db_tools import run_sqlite_query, run_mongodb_query, run_meilisearch_query # Added run_meilisearch_query
+
+
 
 def should_continue(state: GraphState) -> str:
     """
     Conditional edge logic.
     
     Determines the next step based on the router's decision.
-    If the router chose a data source, we proceed to query generation.
-    Otherwise, we end the process.
+    If the router chose a data source (sqlite, mongodb, or meilisearch), 
+    we proceed to query generation. Otherwise, we end the process.
     """
-    if state.get("error") or state["data_source"] == "end":
+    if state.get("error"): # If there was an error in routing
         return "end"
-    else:
-        return "continue"
+    
+    data_source = state.get("data_source")
+    if data_source in ["sqlite", "mongodb", "meilisearch"]: # Added "meilisearch"
+        return "continue_to_query_generation" # Changed the target name for clarity
+    else: # This would include "end" from router or any unexpected values
+        return "end"
 
 # --- Define the graph ---
 workflow = StateGraph(GraphState)
 
 # --- Add the nodes ---
-# The names of the nodes should be descriptive
 workflow.add_node("router", route_query)
 workflow.add_node("query_generator", generate_query)
 workflow.add_node("query_executor", execute_query)
 workflow.add_node("response_generator", generate_response)
 
 # --- Add the edges ---
-# 1. Set the entry point
 workflow.set_entry_point("router")
 
-# 2. Add the conditional edge from the router
+# Updated conditional edge from the router
 workflow.add_conditional_edges(
     "router",
     should_continue,
     {
-        "continue": "query_generator",
+        "continue_to_query_generation": "query_generator", # Updated target name
         "end": END,
     },
 )
 
-# 3. Add the standard edges for the main workflow
 workflow.add_edge("query_generator", "query_executor")
 workflow.add_edge("query_executor", "response_generator")
 workflow.add_edge("response_generator", END)
@@ -52,14 +56,3 @@ workflow.add_edge("response_generator", END)
 
 # --- Compile the graph into a runnable app ---
 app = workflow.compile()
-
-# To visualize the graph, you can uncomment the following lines
-# and ensure you have `pip install Pillow`
-# from IPython.display import Image, display
-# try:
-#     img_data = app.get_graph(xray=True).draw_mermaid_png()
-#     with open("graph.png", "wb") as f:
-#         f.write(img_data)
-#     print("Graph visualization saved to graph.png")
-# except Exception as e:
-#     print(f"Could not generate graph visualization: {e}")

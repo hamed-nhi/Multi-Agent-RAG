@@ -12,3 +12,9 @@ langchain_experimental
 pymongo
 sqlalchemy
 python-dotenv
+
+# MeiliSearch client
+meilisearch
+
+# Neo4j driver
+neo4j

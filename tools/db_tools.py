@@ -2,6 +2,7 @@
 import ast
 import sqlite3
 from pymongo import MongoClient
+import meilisearch
 from langchain_core.tools import tool
 
 # --- SQLite Tools ---
@@ -47,9 +48,8 @@ def run_sqlite_query(query: str) -> str:
     except Exception as e:
         return f"An error occurred: {e}"
 
+
 # --- MongoDB Tools ---
-
-
 def get_mongodb_client():
     """Returns a client connection to the MongoDB."""
     return MongoClient('mongodb://localhost:27017/')
@@ -84,3 +84,44 @@ def run_mongodb_query(query_str: str) -> str: # ورودی را به str تغی�
         return str(result)
     except Exception as e:
         return f"An error occurred during MongoDB query execution: {e}"
+
+
+# --- Meilisearch Tools ---
+def get_meilisearch_client():
+    """
+    Returns a client connection to the MeiliSearch instance.
+    """
+    # Ensure your MeiliSearch server is running, typically on http://localhost:7700
+    # If you have set a master key, provide it as the second argument.
+    client = meilisearch.Client("http://localhost:7700")
+    return client
+
+@tool
+def run_meilisearch_query(search_query: str, index_name: str = "support_tickets", limit: int = 5) -> str:
+    """
+    Executes a search query on the specified MeiliSearch index (default: 'support_tickets').
+    'search_query' is the text string to search for.
+    'limit' specifies the maximum number of search results to return.
+    Use this to find support tickets based on their description or other text fields.
+    """
+    try:
+        client = get_meilisearch_client()
+        index = client.get_index(index_name)
+        
+        search_results = index.search(search_query, {'limit': limit})
+        
+        # --- ADD THIS PRINT STATEMENT ---
+        print(f"MeiliSearch raw search_results: {search_results}") 
+        
+        hits = search_results.get('hits', [])
+        
+        # --- ADD THIS PRINT STATEMENT ---
+        print(f"MeiliSearch extracted hits: {hits}")
+
+        if not hits:
+            return "No documents found matching the search query in MeiliSearch."
+            
+        return str(hits) 
+    except Exception as e:
+        return f"An error occurred during MeiliSearch query execution: {e}"
+

@@ -19,3 +19,10 @@ What projects are being worked on by the Engineering department?
 برای MongoDB:
 List all papers that are preprints.
 Find papers on the topic of NLP that were published as conference papers.
+
+
+سوالات نمونه برای تست MeiliSearch:
+
+Find tickets about MySQL issues.
+What support tickets were raised by Aniruddha Salve?
+Search for open tickets related to Neo4j.
