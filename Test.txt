@@ -1,0 +1,21 @@
+تست مسیر SQLite:
+
+Who is the lead engineer?
+What is the status of the "API Integration Service" project?
+List all projects assigned to Saba Attar.
+تست مسیر MongoDB:
+
+What are the keywords for the paper on RAG by Patrick Lewis?
+Find papers on the topic of "Language Agents".
+Who are the authors of the paper titled "Speculative RAG: Enhancing Retrieval-Augmented Generation"?
+
+
+
+سوالات جدید برای تست:
+
+برای SQLite:
+Which employees work in the Data Science department?
+What projects are being worked on by the Engineering department?
+برای MongoDB:
+List all papers that are preprints.
+Find papers on the topic of NLP that were published as conference papers.
