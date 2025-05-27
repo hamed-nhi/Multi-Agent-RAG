@@ -20,3 +20,4 @@ meilisearch
 neo4j
 
 streamlit
+pandas
