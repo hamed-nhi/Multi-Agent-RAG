@@ -39,3 +39,17 @@ What is the research field of Patrick Lewis?
   Example for neo4j (research field):
         User Question: What is the research field of Patrick Lewis?
         JSON Response: {{"data_source": "neo4j"}}
+
+
+
+
+
+
+
+
+
+    سوال کاربر: papers about RAG from an author like "P. Lewis"
+چرا این سوال خوب است؟
+"P. Lewis" نام کامل نویسنده نیست.
+عبارت "RAG" ممکن است در عنوان یا کلمات کلیدی باشد.
+انتظار از کوئری اولیه: Agent متخصص MongoDB ممکن است یک کوئری خیلی دقیق مانند {"authors": "P. Lewis", "title": {"$regex": "RAG", "$options": "i"}} یا چیزی شبیه به آن تولید کند که احتمالاً نتیجه‌ای برنمی‌گرداند چون نام نویسنده دقیق نیست.

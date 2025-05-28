@@ -40,7 +40,7 @@ def generate_sqlite_query(state: GraphState) -> GraphState:
         - User Question: List all active projects.
         - SQL Query: SELECT project_name FROM projects WHERE LOWER(status) = LOWER('active');
 
-        - User Question: Which employees are in the Engineering department? {/* Note: Only 'Engineering', not 'Engineering department' */}
+        - User Question: Which employees are in the Engineering department?
         - SQL Query: SELECT T1.name FROM employees AS T1 INNER JOIN departments AS T2 ON T1.department_id = T2.id WHERE LOWER(T2.name) = LOWER('Engineering');
         
         - User Question: Who is the lead engineer?

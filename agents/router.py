@@ -1,30 +1,34 @@
 # agents/router.py
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser
+from typing import Optional
+from langchain_core.prompts import ChatPromptTemplate 
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser as StringOutputParser
 from langchain_together import ChatTogether
 
 from graph.state import GraphState
 from config import LLM_MODEL, TOGETHER_API_KEY
 
-# import requests # This import is not currently used, can be removed if not needed later
-
+import re 
+import json 
+import ast 
 def route_query(state: GraphState) -> GraphState:
     """
-    Routes the user's query to the appropriate data source: SQLite, MongoDB, MeiliSearch, or Neo4j.
-    Includes improved error handling for API connection issues.
+    Routes the user's query to the appropriate data source and returns a new state object.
     """
     print("---ROUTING QUERY---")
     query = state["query"]
-    llm = None # Initialize llm
+    llm = None 
     
+    # Prepare a dictionary to hold the updates to the state
+    # Start with the existing state so we don't lose other keys
+    # We will return a new dictionary based on this
+    current_state_snapshot = state.copy() # Make a shallow copy to start
+
     try:
-        # Initialize the LLM
         llm = ChatTogether(
             model=LLM_MODEL,
             together_api_key=TOGETHER_API_KEY
         )
 
-        # Updated prompt to include more specific details for Neo4j
         prompt = ChatPromptTemplate.from_template(
             """
             You are an expert routing assistant. Your only task is to classify a user's question into one of the following categories.
@@ -67,29 +71,37 @@ def route_query(state: GraphState) -> GraphState:
         parser = JsonOutputParser()
         router_chain = prompt | llm | parser
 
-        # Get the decision from the LLM
-        print("Attempting to invoke LLM for routing...")
+        print("Attempting to invoke LLM for routing... (Waiting for API response)")
         decision_json = router_chain.invoke({"query": query})
+        print("LLM response received for routing.")
+        
         decision = decision_json.get("data_source", "general")
         print(f"Router decision: {decision}")
 
-        # Updated logic to include neo4j
-        if decision == "sqlite":
-            state["data_source"] = "sqlite"
-        elif decision == "mongodb":
-            state["data_source"] = "mongodb"
-        elif decision == "meilisearch":
-            state["data_source"] = "meilisearch"
-        elif decision == "neo4j": # New condition for Neo4j
-            state["data_source"] = "neo4j"
-        elif decision == "general":
-            state["data_source"] = "end"
-            state["error"] = "Query is general and not related to specific data sources."
-        else:
-            state["data_source"] = "end"
-            state["error"] = f"Router made an unexpected decision: {decision}"
+        updated_values = {} # Store what needs to be updated
 
-    # Error handling block remains the same
+        if decision == "sqlite":
+            updated_values["data_source"] = "sqlite"
+            updated_values["error"] = None # Clear previous errors if routing is successful
+        elif decision == "mongodb":
+            updated_values["data_source"] = "mongodb"
+            updated_values["error"] = None
+        elif decision == "meilisearch":
+            updated_values["data_source"] = "meilisearch"
+            updated_values["error"] = None
+        elif decision == "neo4j": 
+            updated_values["data_source"] = "neo4j"
+            updated_values["error"] = None
+        elif decision == "general": 
+            updated_values["data_source"] = "end" 
+            updated_values["error"] = "Query is general and not related to specific data sources."
+        else: 
+            updated_values["data_source"] = "end"
+            updated_values["error"] = f"Router made an unexpected decision: {decision}"
+        
+        # Return a new state dictionary with the updates
+        return {**current_state_snapshot, **updated_values}
+
     except Exception as e:
         error_message_str = str(e).lower()
         custom_error_msg = "" 
@@ -98,7 +110,7 @@ def route_query(state: GraphState) -> GraphState:
            "timeout" in error_message_str or \
            "network" in error_message_str or \
            "service unavailable" in error_message_str or \
-           "Max retries exceeded with url" in error_message_str:
+           "max retries exceeded with url" in error_message_str:
             custom_error_msg = (
                 "Failed to connect to the LLM service (Together AI). "
                 "Please check your internet connection and API key validity. "
@@ -119,7 +131,61 @@ def route_query(state: GraphState) -> GraphState:
             )
             print(f"UNEXPECTED ERROR during routing: {custom_error_msg}")
         
-        state["error"] = custom_error_msg
-        state["data_source"] = "end" 
+        # Return a new state dictionary with error information
+        return {
+            **current_state_snapshot, 
+            "error": custom_error_msg, 
+            "data_source": "end"
+        }
+        
+ # agents/router.py
 
-    return state
+
+# ... (یک تابع کمکی برای استخراج JSON، مشابه extract_json_query_from_text در query_refiner.py) ...
+def extract_json_from_llm_output(text: str) -> Optional[str]:
+    """
+    Attempts to extract the first valid JSON object string that starts with '{' and ends with '}'
+    from a larger text, often ignoring preceding or succeeding text like <think> tags.
+    """
+    # This regex tries to find a JSON object, possibly surrounded by other text.
+    # It looks for the last occurrence of '{' that has a matching '}'
+    # This is a common pattern if the JSON is at the end.
+    match = re.search(r"(\{.*\})", text, re.DOTALL)
+    if match:
+        potential_json_str = match.group(1)
+        try:
+            json.loads(potential_json_str) # Validate
+            return potential_json_str
+        except json.JSONDecodeError:
+            # Try ast.literal_eval for simple dicts if json.loads is too strict
+            try:
+                import ast
+                ast.literal_eval(potential_json_str)
+                return potential_json_str
+            except:
+                pass # Not a valid dict/json string by ast either
+    
+    # Fallback: If the above doesn't work, try finding JSON that might not be the last part
+    # This is less robust but can catch JSON embedded within text.
+    try:
+        # Find the first '{' and try to find a matching '}'
+        # This is a simplistic approach and might fail for complex nested structures or multiple JSONs
+        first_brace = text.find('{')
+        if first_brace != -1:
+            # Try to find a balanced brace structure
+            open_braces = 0
+            for i in range(first_brace, len(text)):
+                if text[i] == '{':
+                    open_braces += 1
+                elif text[i] == '}':
+                    open_braces -= 1
+                    if open_braces == 0:
+                        potential_json_str = text[first_brace : i+1]
+                        json.loads(potential_json_str) # Validate
+                        return potential_json_str
+    except:
+        pass # If any error occurs, it's not valid JSON
+
+    return None
+
+    

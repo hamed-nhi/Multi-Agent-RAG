@@ -1,11 +1,10 @@
 # agents/executor_and_responder.py
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser as StringOutputParser # Assuming this alias is what you are using
+from langchain_core.output_parsers import StrOutputParser as StringOutputParser
 from langchain_together import ChatTogether
 
 from graph.state import GraphState
 from config import LLM_MODEL, TOGETHER_API_KEY
-# Import all necessary tools, including the new MeiliSearch tool
 from tools.db_tools import run_sqlite_query, run_mongodb_query, run_meilisearch_query, run_neo4j_query
 
 # --- Initialize the LLM ---
@@ -15,69 +14,103 @@ llm = ChatTogether(
 )
 
 # --- Query Execution Node ---
-# agents/executor_and_responder.py
-
-# ... (import statements and llm instance at the top) ...
-
-# --- Query Execution Node ---
 def execute_query(state: GraphState) -> GraphState:
     """
-    Executes the generated query on the appropriate database 
-    (SQLite, MongoDB, MeiliSearch, or Neo4j) and retrieves the context.
+    Executes the generated query and sets flags for refinement if results are not satisfactory.
     """
     print("---EXECUTING QUERY---")
     generated_q = state.get("generated_query")
     data_source = state.get("data_source")
     
-    context = "" 
-    error_message = state.get("error") 
+    # NEW: Initialize or retrieve refinement-related state variables
+    # The original user query is passed along if not already set
+    state["original_user_query"] = state.get("original_user_query") or state.get("query")
+    # The first generated query (before any refinement attempts)
+    state["initial_generated_query"] = state.get("initial_generated_query") or generated_q
+    
+    current_context = "" 
+    current_error = state.get("error") # Preserve error from previous steps if any
+    needs_refinement_flag = False # MODIFIED: Default to False
+
+    # Increment attempt count if it exists, otherwise initialize to 1
+    attempt_num = state.get("refinement_attempt_count", 0) + 1 # MODIFIED: Start from 0, so first try is 1
+    state["refinement_attempt_count"] = attempt_num
+    
+    print(f"Query execution attempt: {attempt_num}")
+    print(f"Query for {data_source}: {generated_q}")
 
     if not generated_q and data_source not in ["end", "general"]:
-        current_error = f"No query was generated for data source: {data_source}."
-        print(current_error)
-        state["error"] = error_message or current_error 
+        err_msg = f"No query was generated for data source: {data_source}."
+        print(err_msg)
+        state["error"] = current_error or err_msg 
     elif data_source == 'sqlite':
-        context = run_sqlite_query.invoke(generated_q)
+        current_context = run_sqlite_query.invoke(generated_q)
     elif data_source == 'mongodb':
-        context = run_mongodb_query.invoke(generated_q)
+        current_context = run_mongodb_query.invoke(generated_q)
     elif data_source == 'meilisearch': 
-        context = run_meilisearch_query.invoke(generated_q)
-    elif data_source == 'neo4j': # New condition for Neo4j
-        # The run_neo4j_query tool expects the Cypher string directly
-        context = run_neo4j_query.invoke(generated_q)
+        current_context = run_meilisearch_query.invoke(generated_q)
+    elif data_source == 'neo4j': 
+        current_context = run_neo4j_query.invoke(generated_q)
     elif data_source in ["end", "general"]:
-        print(f"Execution skipped as data_source is '{data_source}'. Router error (if any): {error_message}")
+        print(f"Execution skipped as data_source is '{data_source}'. Prior error (if any): {current_error}")
     else:
-        current_error = f"Unknown data_source type for query execution: {data_source}"
-        print(current_error)
-        state["error"] = error_message or current_error
+        err_msg = f"Unknown data_source type for query execution: {data_source}"
+        print(err_msg)
+        state["error"] = current_error or err_msg
 
-    print(f"Raw context from tool (before type check): '{context}', type: {type(context)}")
+    print(f"Raw context from tool: '{current_context}', type: {type(current_context)}")
 
-    if isinstance(context, str) and ("An error occurred" in context or "Failed to parse" in context or "No records found" in context or "No documents found" in context or "Connection Error" in context): # Added "No records found" and "Connection Error" for Neo4j
-        tool_message = context 
-        print(f"Tool execution resulted in message: {tool_message}")
+    is_empty_or_no_results = False
+    # Check if context indicates an error or "not found" from the tool itself
+    if isinstance(current_context, str) and \
+       ("An error occurred" in current_context or \
+        "Failed to parse" in current_context or \
+        "Connection Error" in current_context):
+        # This is a hard error from the tool, not just empty results
+        print(f"Tool execution resulted in an error: {current_context}")
+        state["error"] = current_error or current_context # Prioritize existing error
+        state["context"] = f"Error during query execution: {current_context}"
+        needs_refinement_flag = False # Do not refine on hard execution errors
+    elif isinstance(current_context, str) and \
+         (current_context.strip() == "[]" or \
+          "No documents found" in current_context or \
+          "No records found" in current_context):
+        print("Query returned no results or an empty list string.")
+        is_empty_or_no_results = True
+    elif isinstance(current_context, list) and not current_context: # Actual empty list
+        print("Query returned an actual empty list.")
+        is_empty_or_no_results = True
+    
+    # MODIFIED: Logic for setting refinement flag
+    # Allow only one refinement attempt for now (attempt_num == 1 means this is the first try)
+    MAX_REFINEMENT_ATTEMPTS = 1 # Allow 1 refinement, so total 2 attempts (initial + 1 refined)
+    if is_empty_or_no_results and attempt_num <= MAX_REFINEMENT_ATTEMPTS:
+        print(f"Query for {data_source} yielded no results. Flagging for refinement (attempt {attempt_num}).")
+        needs_refinement_flag = True
+        state["last_failed_query"] = generated_q # Store the query that just failed
+        state["context"] = "[]" # Set context to empty list for now
+        # Error from previous steps is preserved or cleared if we are attempting refinement
+        state["error"] = None if needs_refinement_flag else current_error
+    elif is_empty_or_no_results and attempt_num > MAX_REFINEMENT_ATTEMPTS:
+        print("Max refinement attempts reached. Proceeding with empty/no results.")
+        state["context"] = "[]"
+        state["error"] = current_error or "Query and its refinement(s) returned no results."
+    elif state.get("error"): # If a hard error was already set (and not cleared for refinement)
+        state["context"] = state.get("context") or f"Error during query execution: {state.get('error')}"
+    else: # Successful execution with data
+        state["context"] = current_context
+        state["error"] = None # Clear any previous soft errors if we have good context now
         
-        if "No records found" in tool_message or "No documents found" in tool_message :
-            state["context"] = "[]" 
-        else: 
-            state["context"] = f"Error during query execution: {tool_message}"
-            state["error"] = error_message or tool_message 
-    elif context is not None : 
-        state["context"] = context
-    else: 
-        state["context"] = "[]" 
-        if data_source not in ["end", "general"] and not state.get("error"): 
-             state["error"] = state.get("error") or f"Query execution for {data_source} returned no context."
+    state["needs_query_refinement"] = needs_refinement_flag
 
-    print(f"Final context being set to state: {state.get('context')}")
+    print(f"Final context for this step: {state.get('context')}")
+    print(f"Needs query refinement: {state.get('needs_query_refinement')}")
     if state.get("error"):
         print(f"Error state after execution: {state['error']}")
     
     return state
 
-
-# --- Response Generation Node ---
+# ... (generate_response function remains the same for now) ...
 def generate_response(state: GraphState) -> GraphState:
     """
     Generates a natural language response to the user based on the retrieved context.

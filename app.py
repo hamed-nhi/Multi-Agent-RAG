@@ -13,13 +13,30 @@ def main():
         
         if user_query.lower() == 'exit':
             break
-            
+        
+        
+        #------------------------------------------------------    
         # The initial state for the graph
-        inputs = {"query": user_query, "error": None}
+        # inputs = {"query": user_query, "error": None}
+        
+        inputs = {
+            "query": user_query,
+            "data_source": None, 
+            "generated_query": None,
+            "context": None,
+            "response": None,
+            "error": None,
+            "original_user_query": user_query, 
+            "initial_generated_query": None,
+            "last_failed_query": None,
+            "needs_query_refinement": False, 
+            "refinement_attempt_count": 0  
+                }
+        #------------------------------------------------------    
         
         # Invoke the graph
         # The .stream() method lets us see the output of each node as it runs
-        for output in app.stream(inputs, {"recursion_limit": 10}):
+        for output in app.stream(inputs, {"recursion_limit": 100}):
             # The key is the name of the node that just ran
             for key, value in output.items():
                 print(f"--- Output from node: {key} ---")
