@@ -50,7 +50,7 @@ def display_sidebar():
     st.sidebar.markdown("- **🔍 MeiliSearch:** Support Tickets (Text Search)")
     st.sidebar.markdown("- **🕸️ Neo4j:** Researcher Collaborations & Projects (Cypher Queries)")
     st.sidebar.markdown("---")
-    st.sidebar.caption("Implemented by: [Your Name/Project Alias]")
+    st.sidebar.caption("Implemented by: [Hamed Nahali]")
 
 def display_example_questions():
     st.subheader("Or try one of these example questions:")
