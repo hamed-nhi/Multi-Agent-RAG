@@ -1,27 +1,81 @@
 # agents/router.py
 from typing import Optional
-from langchain_core.prompts import ChatPromptTemplate 
-from langchain_core.output_parsers import JsonOutputParser, StrOutputParser as StringOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser as StringOutputParser # Import both
 from langchain_together import ChatTogether
 
-from graph.state import GraphState
+from graph.state import GraphState # Make sure GraphState includes all fields
 from config import LLM_MODEL, TOGETHER_API_KEY
 
-import re 
-import json 
-import ast 
+import re # For regular expressions
+import json # For parsing JSON strings
+import ast  # For potentially more lenient parsing of dictionary-like strings
+
+def extract_json_from_llm_output(text: str) -> Optional[str]:
+    """
+    Attempts to extract the last valid JSON object string from a larger text.
+    It looks for a string that starts with { and ends with }, capturing the content.
+    It prioritizes JSON within markdown-like code blocks if present.
+    """
+    # Try to find JSON enclosed in ```json ... ```
+    match_markdown = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
+    if match_markdown:
+        potential_json_str = match_markdown.group(1)
+        try:
+            json.loads(potential_json_str)
+            print(f"Extracted JSON from markdown block: {potential_json_str}")
+            return potential_json_str
+        except json.JSONDecodeError:
+            print(f"Markdown JSON block found but invalid: {potential_json_str}")
+            # Fall through to other methods if markdown JSON is invalid
+
+    # Try to find the last occurrence of a JSON-like structure
+    matches = list(re.finditer(r"(\{.*?\})", text, re.DOTALL)) # Use non-greedy .*?
+    if matches:
+        potential_json_str = matches[-1].group(1) # Get the last match
+        try:
+            json.loads(potential_json_str)
+            print(f"Extracted JSON (last match via regex): {potential_json_str}")
+            return potential_json_str
+        except json.JSONDecodeError:
+            try:
+                evaluated = ast.literal_eval(potential_json_str)
+                if isinstance(evaluated, dict): # Ensure it's a dictionary
+                    print(f"Extracted dict via ast.literal_eval (last match): {potential_json_str}")
+                    return potential_json_str 
+            except (SyntaxError, ValueError):
+                print(f"Could not parse as JSON or dict via ast (last match): {potential_json_str}")
+    
+    # Fallback: Simplistic first '{' to last '}' if other methods fail (less reliable)
+    try:
+        first_brace = text.find('{')
+        last_brace = text.rfind('}')
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            potential_json_str = text[first_brace : last_brace+1]
+            json.loads(potential_json_str) # Validate
+            print(f"Extracted JSON (fallback first_brace to last_brace): {potential_json_str}")
+            return potential_json_str
+    except (json.JSONDecodeError, ValueError, SyntaxError):
+        print(f"Fallback JSON extraction failed for text: {text[:200]}...")
+
+    print(f"Could not extract valid JSON from LLM output: {text[:200]}...")
+    return None
+
+
 def route_query(state: GraphState) -> GraphState:
     """
-    Routes the user's query to the appropriate data source and returns a new state object.
+    Routes the user's query to an appropriate data source, triggers clarification if needed,
+    and returns a new state object.
     """
     print("---ROUTING QUERY---")
-    query = state["query"]
+    current_query_for_routing = state["query"] # The query to be routed
     llm = None 
     
-    # Prepare a dictionary to hold the updates to the state
-    # Start with the existing state so we don't lose other keys
-    # We will return a new dictionary based on this
-    current_state_snapshot = state.copy() # Make a shallow copy to start
+    current_state_snapshot = state.copy() 
+    # Reset clarification fields for this routing attempt
+    current_state_snapshot["clarification_question_needed"] = False
+    current_state_snapshot["clarification_question_text"] = None
+    # user_clarification_response is handled by the clarification node
 
     try:
         llm = ChatTogether(
@@ -38,7 +92,7 @@ def route_query(state: GraphState) -> GraphState:
             - `mongodb`: For any questions about scientific research papers, their authors, publication years, topics, or keywords.
             - `meilisearch`: For searching and finding information within support tickets, such as ticket descriptions, who raised them, or their current status.
             - `neo4j`: For questions about relationships between researchers, their collaborations, their research fields, or the projects/topics they work on (e.g., "Who collaborates with X?", "What is the research field of Y?", "What projects does Z work on?").
-            - `general`: If the question does not fit into any of the above categories and is a general conversational question.
+            - `general`: If the question does not fit into any of the above categories, is a general conversational question, or if it's too vague to route to a specific database.
 
             Analyze the user's question provided below.
             User Question: "{query}"
@@ -68,41 +122,64 @@ def route_query(state: GraphState) -> GraphState:
             """
         )
 
-        parser = JsonOutputParser()
-        router_chain = prompt | llm | parser
+        # Get raw string output first to handle potential extra text from LLM
+        router_chain_text_output = prompt | llm | StringOutputParser() 
 
         print("Attempting to invoke LLM for routing... (Waiting for API response)")
-        decision_json = router_chain.invoke({"query": query})
-        print("LLM response received for routing.")
+        raw_llm_output = router_chain_text_output.invoke({"query": current_query_for_routing})
+        print(f"LLM raw output for routing: '{raw_llm_output}'")
+
+        # Attempt to extract the JSON part from the raw output
+        json_string_from_output = extract_json_from_llm_output(raw_llm_output)
         
-        decision = decision_json.get("data_source", "general")
-        print(f"Router decision: {decision}")
+        updated_values = {"error": None} # Default to no error for this step
 
-        updated_values = {} # Store what needs to be updated
+        if json_string_from_output:
+            try:
+                decision_json = json.loads(json_string_from_output) 
+                decision = decision_json.get("data_source", "general")
+                print(f"Router decision (extracted from JSON): {decision}")
 
-        if decision == "sqlite":
-            updated_values["data_source"] = "sqlite"
-            updated_values["error"] = None # Clear previous errors if routing is successful
-        elif decision == "mongodb":
-            updated_values["data_source"] = "mongodb"
-            updated_values["error"] = None
-        elif decision == "meilisearch":
-            updated_values["data_source"] = "meilisearch"
-            updated_values["error"] = None
-        elif decision == "neo4j": 
-            updated_values["data_source"] = "neo4j"
-            updated_values["error"] = None
-        elif decision == "general": 
-            updated_values["data_source"] = "end" 
-            updated_values["error"] = "Query is general and not related to specific data sources."
-        else: 
+                if decision == "sqlite":
+                    updated_values["data_source"] = "sqlite"
+                elif decision == "mongodb":
+                    updated_values["data_source"] = "mongodb"
+                elif decision == "meilisearch":
+                    updated_values["data_source"] = "meilisearch"
+                elif decision == "neo4j": 
+                    updated_values["data_source"] = "neo4j"
+                elif decision == "general": 
+                    print("Query classified as 'general' by LLM, initiating clarification.")
+                    updated_values["data_source"] = "clarification_needed" # NEW data_source state
+                    updated_values["clarification_question_needed"] = True
+                    updated_values["clarification_question_text"] = (
+                        "Your question seems a bit general or ambiguous for a direct database query. "
+                        "Could you please specify if you're looking for information about: \n"
+                        "1. Employees, Departments, or Projects (company data)? \n"
+                        "2. Scientific Research Papers? \n"
+                        "3. Support Tickets? \n"
+                        "4. Collaborations, research fields, or work done by Researchers? \n"
+                        "Please provide more details or rephrase your question focusing on one of these areas."
+                    )
+                    # Store the query that needs clarification
+                    updated_values["original_query_before_clarification"] = current_query_for_routing
+                else: # Unexpected value in "data_source" field of JSON
+                    updated_values["data_source"] = "end"
+                    updated_values["error"] = f"Router JSON contained an unexpected data_source value: {decision}"
+            except json.JSONDecodeError as json_err:
+                custom_error_msg = f"Failed to parse the extracted JSON from LLM output. Extracted string: '{json_string_from_output}'. Error: {json_err}"
+                print(f"JSON PARSING ERROR (after extraction attempt): {custom_error_msg}")
+                updated_values["error"] = custom_error_msg
+                updated_values["data_source"] = "end"
+        else: # JSON could not be extracted from LLM's output
+            custom_error_msg = f"LLM output for routing did not contain a recognizable JSON object. Raw output: '{raw_llm_output}'"
+            print(f"JSON EXTRACTION FAILED during routing: {custom_error_msg}")
+            updated_values["error"] = custom_error_msg
             updated_values["data_source"] = "end"
-            updated_values["error"] = f"Router made an unexpected decision: {decision}"
         
-        # Return a new state dictionary with the updates
         return {**current_state_snapshot, **updated_values}
 
-    except Exception as e:
+    except Exception as e: # Catch other errors like connection errors
         error_message_str = str(e).lower()
         custom_error_msg = "" 
 
@@ -117,75 +194,15 @@ def route_query(state: GraphState) -> GraphState:
                 f"Details: {e}"
             )
             print(f"CONNECTION ERROR during routing: {custom_error_msg}")
-        elif "invalid json output" in error_message_str: 
-            problematic_output = error_message_str.split('invalid json output:')[-1].strip()
-            custom_error_msg = (
-                f"LLM output was not valid JSON. LLM Output: '{problematic_output}'. "
-                f"Details: {e}"
-            )
-            print(f"JSON PARSING ERROR during routing: {custom_error_msg}")
         else: 
             custom_error_msg = (
-                "An unexpected error occurred during the routing phase. "
+                "An unexpected error occurred during the routing phase (e.g., during LLM call). "
                 f"Details: {e}"
             )
             print(f"UNEXPECTED ERROR during routing: {custom_error_msg}")
         
-        # Return a new state dictionary with error information
         return {
             **current_state_snapshot, 
             "error": custom_error_msg, 
             "data_source": "end"
         }
-        
- # agents/router.py
-
-
-# ... (یک تابع کمکی برای استخراج JSON، مشابه extract_json_query_from_text در query_refiner.py) ...
-def extract_json_from_llm_output(text: str) -> Optional[str]:
-    """
-    Attempts to extract the first valid JSON object string that starts with '{' and ends with '}'
-    from a larger text, often ignoring preceding or succeeding text like <think> tags.
-    """
-    # This regex tries to find a JSON object, possibly surrounded by other text.
-    # It looks for the last occurrence of '{' that has a matching '}'
-    # This is a common pattern if the JSON is at the end.
-    match = re.search(r"(\{.*\})", text, re.DOTALL)
-    if match:
-        potential_json_str = match.group(1)
-        try:
-            json.loads(potential_json_str) # Validate
-            return potential_json_str
-        except json.JSONDecodeError:
-            # Try ast.literal_eval for simple dicts if json.loads is too strict
-            try:
-                import ast
-                ast.literal_eval(potential_json_str)
-                return potential_json_str
-            except:
-                pass # Not a valid dict/json string by ast either
-    
-    # Fallback: If the above doesn't work, try finding JSON that might not be the last part
-    # This is less robust but can catch JSON embedded within text.
-    try:
-        # Find the first '{' and try to find a matching '}'
-        # This is a simplistic approach and might fail for complex nested structures or multiple JSONs
-        first_brace = text.find('{')
-        if first_brace != -1:
-            # Try to find a balanced brace structure
-            open_braces = 0
-            for i in range(first_brace, len(text)):
-                if text[i] == '{':
-                    open_braces += 1
-                elif text[i] == '}':
-                    open_braces -= 1
-                    if open_braces == 0:
-                        potential_json_str = text[first_brace : i+1]
-                        json.loads(potential_json_str) # Validate
-                        return potential_json_str
-    except:
-        pass # If any error occurs, it's not valid JSON
-
-    return None
-
-    

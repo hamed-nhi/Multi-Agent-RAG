@@ -36,9 +36,15 @@ What projects or topics is Saba Attar working on?
 Find researchers working on AI in Healthcare.
 List collaborators of Arnab Mitra Utsab. (این مستقیماً از مثال مقاله است)
 What is the research field of Patrick Lewis?
-  Example for neo4j (research field):
-        User Question: What is the research field of Patrick Lewis?
-        JSON Response: {{"data_source": "neo4j"}}
+
+
+
+
+
+papers about RAG from an author like "P. Lewis"
+
+
+  
 
 
 
