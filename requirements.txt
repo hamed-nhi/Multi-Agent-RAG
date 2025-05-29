@@ -1,16 +1,13 @@
-# requirements.txt
 
-# Core LangChain libraries - trying slightly more aligned recent versions
+
 langchain==0.2.5
-langchain-core==0.2.10  # کمی بالاتر از 0.2.9
-langgraph==0.1.2      # کمی بالاتر از 0.1.1
+langchain-core==0.2.10 
+langgraph==0.1.2      
 
-# These might pull compatible sub-dependencies, or we might need to pin them too
-langchain-community==0.2.5 # Keep as is, seems stable
-langchain-together==0.1.3  # Keep as is
-langchain_experimental     # Let pip choose latest compatible
+langchain-community==0.2.5
+langchain-together==0.1.3 
+langchain_experimental    
 
-# Other dependencies
 pymongo
 sqlalchemy
 python-dotenv

@@ -1,15 +1,14 @@
-# agents/router.py
 from typing import Optional
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import JsonOutputParser, StrOutputParser as StringOutputParser # Import both
+from langchain_core.output_parsers import JsonOutputParser, StrOutputParser as StringOutputParser 
 from langchain_together import ChatTogether
 
-from graph.state import GraphState # Make sure GraphState includes all fields
+from graph.state import GraphState 
 from config import LLM_MODEL, TOGETHER_API_KEY
 
-import re # For regular expressions
-import json # For parsing JSON strings
-import ast  # For potentially more lenient parsing of dictionary-like strings
+import re 
+import json 
+import ast  
 
 def extract_json_from_llm_output(text: str) -> Optional[str]:
     """

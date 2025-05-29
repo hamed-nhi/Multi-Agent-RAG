@@ -1,9 +1,7 @@
-تست مسیر SQLite:
 
 Who is the lead engineer?
 What is the status of the "API Integration Service" project?
 List all projects assigned to Saba Attar.
-تست مسیر MongoDB:
 
 What are the keywords for the paper on RAG by Patrick Lewis?
 Find papers on the topic of "Language Agents".
@@ -11,17 +9,14 @@ Who are the authors of the paper titled "Speculative RAG: Enhancing Retrieval-Au
 
 
 
-سوالات جدید برای تست:
 
-برای SQLite:
+
 Which employees work in the Data Science department?
 What projects are being worked on by the Engineering department?
-برای MongoDB:
 List all papers that are preprints.
 Find papers on the topic of NLP that were published as conference papers.
 
 
-سوالات نمونه برای تست MeiliSearch:
 
 Find tickets about MySQL issues.
 What support tickets were raised by Aniruddha Salve?
@@ -29,12 +24,11 @@ Search for open tickets related to Neo4j.
 
 
 
-ا سوالاتی را بپرسید که انتظار دارید توسط Agent متخصص Neo4j پاسخ داده شوند. به عنوان مثال:
 
 Who collaborates with Aniruddha Salve?
 What projects or topics is Saba Attar working on?
 Find researchers working on AI in Healthcare.
-List collaborators of Arnab Mitra Utsab. (این مستقیماً از مثال مقاله است)
+List collaborators of Arnab Mitra Utsab. 
 What is the research field of Patrick Lewis?
 
 
@@ -44,18 +38,6 @@ What is the research field of Patrick Lewis?
 papers about RAG from an author like "P. Lewis"
 
 
-  
 
 
-
-
-
-
-
-
-
-    سوال کاربر: papers about RAG from an author like "P. Lewis"
-چرا این سوال خوب است؟
-"P. Lewis" نام کامل نویسنده نیست.
-عبارت "RAG" ممکن است در عنوان یا کلمات کلیدی باشد.
-انتظار از کوئری اولیه: Agent متخصص MongoDB ممکن است یک کوئری خیلی دقیق مانند {"authors": "P. Lewis", "title": {"$regex": "RAG", "$options": "i"}} یا چیزی شبیه به آن تولید کند که احتمالاً نتیجه‌ای برنمی‌گرداند چون نام نویسنده دقیق نیست.
+ papers about RAG from an author like "P. Lewis"

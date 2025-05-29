@@ -1,12 +1,12 @@
-# ui/app_ui.py
+
 import sys
 import os
 import streamlit as st
 import ast 
 import pandas as pd 
-import io # Required for capturing print statements
-import contextlib # Required for capturing print statements
-import time # For small delays if needed
+import io 
+import contextlib 
+import time 
 
 # --- Add the project root to the Python path ---
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
