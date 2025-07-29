@@ -16,23 +16,22 @@ The core architecture is a practical implementation inspired by the concepts pre
 
 ## 📂 Project Structure
 
-The project is organized into several key directories, each responsible for a specific part of the functionality.
+The project is organized into several key directories:
 
-/
-├── agents/             # Contains the core logic for each agent (Router, Refiner, etc.).
-│   ├── router.py
-│   └── ...
-├── database/           # Scripts for creating and populating the databases.
-│   └── populate_db.py
-├── graph/              # Defines the structure and flow of the agentic graph.
-│   └── builder.py
-├── tools/              # Contains tools for database-specific query generation.
-│   └── db_tools.py
-├── ui/                 # The Streamlit user interface code.
-│   └── app_ui.py
-├── .env.example        # Example environment variables file.
-├── app.py              # Main entry point for the command-line application.
-└── requirements.txt    # Project dependencies.
+- **`agents/`**: Contains the core logic for each agent (Router, Refiner, etc.).
+  - `router.py`
+  - `...`
+- **`database/`**: Scripts for creating and populating the databases.
+  - `populate_db.py`
+- **`graph/`**: Defines the structure and flow of the agentic graph.
+  - `builder.py`
+- **`tools/`**: Contains tools for database-specific query generation.
+  - `db_tools.py`
+- **`ui/`**: The Streamlit user interface code.
+  - `app_ui.py`
+- **`.env.example`**: Example environment variables file.
+- **`app.py`**: Main entry point for the command-line application.
+- **`requirements.txt`**: Project dependencies.
 
 
 The system leverages `LangGraph` to create a stateful, cyclical graph of agents that work collaboratively to answer queries.
