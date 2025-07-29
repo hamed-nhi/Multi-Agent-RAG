@@ -93,7 +93,7 @@ graph TD
     D3 -- Failure --> C
     D4 -- Failure --> C
 
-    C -- Rewrites Query --> B
+    C -- "Rewrites Query" --> B
 ```
 ## ✨ Key Features
 
@@ -182,7 +182,9 @@ You will be prompted to enter your questions in the terminal.
 
 ## 🙏 Acknowledgements
 
-The architecture and core concepts of this project are heavily inspired by the insightful work presented in the following research paper:
+The core architecture of this project is heavily inspired by the insightful work presented in the research paper "A Collaborative Multi-Agent Approach to Retrieval-Augmented Generation Across Diverse Data."
+
+The **Refiner Agent**, which provides a self-correction loop for failed queries, is an original contribution to this project and was not part of the initial paper's design. This feature was added to enhance the system's robustness and error handling.
 
 * **Title**: A Collaborative Multi-Agent Approach to Retrieval-Augmented Generation Across Diverse Data
 * **Authors**: Aniruddha Salve, Saba Attar, Mahesh Deshmukh, Sayali Shivpuje, Arnab Mitra Utsab
