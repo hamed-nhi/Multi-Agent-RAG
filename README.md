@@ -17,7 +17,7 @@ The core architecture is a practical implementation inspired by the concepts pre
 ## 📂 Project Structure
 
 The project is organized into several key directories, each responsible for a specific part of the functionality.
-
+\`\`\`
 /
 ├── agents/             # Contains the core logic for each agent (Router, Refiner, etc.).
 │   ├── router.py
@@ -32,7 +32,7 @@ The project is organized into several key directories, each responsible for a sp
 ├── .env.example        # Example environment variables file.
 ├── app.py              # Main entry point for the command-line application.
 └── requirements.txt    # Project dependencies.
-
+\`\`\`
 
 
 The system leverages `LangGraph` to create a stateful, cyclical graph of agents that work collaboratively to answer queries.
