@@ -49,7 +49,7 @@ graph TD
         A[User Query]
     end
 
-    subgraph "Core Agent System (LangGraph)"
+    subgraph "Core Agent System<br>(LangGraph)"
         B(Router Agent)
         C(Refiner Agent)
 
